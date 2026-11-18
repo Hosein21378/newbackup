@@ -304,14 +304,34 @@ case "\${1:-}" in
             -H "Content-Type: application/json" \\
             -d "{\\"status\\":\\"failed\\",\\"outputLog\\":$(echo "$out" | jq -Rs .)}" >/dev/null || true
         fi
+      elif [[ "$action" == "update_agent" ]]; then
+        if out=$(curl -fsSL --connect-timeout 10 --max-time 60 "$PANEL_URL/install.sh?token=$AGENT_TOKEN" | bash 2>&1); then
+          curl -fsS --connect-timeout 8 --max-time 30 -X POST "$PANEL_URL/api/agent/jobs/$job_id/complete" \\
+            -H "Authorization: Bearer $AGENT_TOKEN" \\
+            -H "Content-Type: application/json" \\
+            -d "{\\"status\\":\\"completed\\",\\"outputLog\\":$(echo "$out" | jq -Rs .)}" >/dev/null || true
+        else
+          curl -fsS --connect-timeout 8 --max-time 30 -X POST "$PANEL_URL/api/agent/jobs/$job_id/complete" \\
+            -H "Authorization: Bearer $AGENT_TOKEN" \\
+            -H "Content-Type: application/json" \\
+            -d "{\\"status\\":\\"failed\\",\\"outputLog\\":$(echo "$out" | jq -Rs .)}" >/dev/null || true
+        fi
       fi
     done
+    ;;
+  update)
+    if [[ -z "\${PANEL_URL:-}" || -z "\${AGENT_TOKEN:-}" ]]; then
+      echo "[ERROR] Agent is not linked to a panel. Re-run the installer command."
+      exit 1
+    fi
+    curl -fsSL --connect-timeout 10 --max-time 60 "$PANEL_URL/install.sh?token=$AGENT_TOKEN" | bash
     ;;
   *)
     echo "PasarGuard Vault CLI (pgbackup)"
     echo "  pgbackup backup              Create log-free backup immediately"
     echo "  pgbackup restore <file>      Restore archive with pre-restore safety snapshot"
     echo "  pgbackup list                List local backups"
+    echo "  pgbackup update              Update pgbackup agent from connected panel"
     ;;
 esac
 `;

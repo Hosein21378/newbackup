@@ -4,9 +4,25 @@ export type ServerStatus = 'online' | 'pending' | 'offline';
 
 export type BackupTrigger = 'manual' | 'scheduled' | 'upload' | 'pre_restore' | 'sandbox_test';
 
-export type JobAction = 'backup_now' | 'restore_archive';
+export type JobAction = 'backup_now' | 'restore_archive' | 'update_agent';
 
 export type JobStatus = 'pending' | 'running' | 'completed' | 'failed';
+
+export interface SystemUpdateStatus {
+  repo: string;
+  isGitRepo: boolean;
+  currentCommit: string | null;
+  currentMessage: string | null;
+  currentDate: string | null;
+  latestCommit: string | null;
+  latestMessage: string | null;
+  latestDate: string | null;
+  updateAvailable: boolean;
+  checkError: string | null;
+  status: 'idle' | 'running' | 'success' | 'error';
+  log: string;
+  updatedAt: string | null;
+}
 
 export interface ExclusionPolicy {
   excludeLogsDir: boolean;

@@ -1,6 +1,6 @@
-import { Activity, Archive, Server, ShieldCheck, SlidersHorizontal, X } from 'lucide-react';
+import { Activity, Archive, ArrowUpCircle, Server, ShieldCheck, SlidersHorizontal, X } from 'lucide-react';
 
-export type NavTab = 'backups' | 'servers' | 'policy' | 'jobs';
+export type NavTab = 'backups' | 'servers' | 'policy' | 'jobs' | 'update';
 
 interface SidebarProps {
   activeTab: NavTab;
@@ -8,6 +8,7 @@ interface SidebarProps {
   backupsCount: number;
   serversCount: number;
   activeJobsCount: number;
+  updateAvailable: boolean;
   mobileOpen: boolean;
   onCloseMobile: () => void;
 }
@@ -18,6 +19,7 @@ export function Sidebar({
   backupsCount,
   serversCount,
   activeJobsCount,
+  updateAvailable,
   mobileOpen,
   onCloseMobile,
 }: SidebarProps) {
@@ -26,11 +28,13 @@ export function Sidebar({
     label: string;
     icon: typeof Archive;
     count?: number;
+    badgeText?: string;
   }> = [
     { id: 'backups', label: 'مخزن بکاپ و بازیابی', icon: Archive, count: backupsCount },
     { id: 'servers', label: 'سرورها و نصب تک‌خطی', icon: Server, count: serversCount },
     { id: 'policy', label: 'فیلتر لاگ و زمان‌بندی', icon: SlidersHorizontal },
     { id: 'jobs', label: 'صف عملیات سرور', icon: Activity, count: activeJobsCount > 0 ? activeJobsCount : undefined },
+    { id: 'update', label: 'بروزرسانی پنل', icon: ArrowUpCircle, badgeText: updateAvailable ? 'جدید' : undefined },
   ];
 
   const handleSelect = (id: NavTab) => {
@@ -92,6 +96,11 @@ export function Sidebar({
                 {typeof item.count === 'number' && (
                   <span className="font-mono text-xs tabular-nums text-slate-400">
                     {item.count}
+                  </span>
+                )}
+                {item.badgeText && (
+                  <span className="text-xs font-medium text-amber-400">
+                    {item.badgeText}
                   </span>
                 )}
               </button>

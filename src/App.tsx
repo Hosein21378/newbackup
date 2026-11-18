@@ -6,11 +6,13 @@ import { InspectArchiveModal, RestoreModal, UploadModal } from './components/Mod
 import { PolicySettingsView } from './components/PolicySettingsView.tsx';
 import { ServersInstallView } from './components/ServersInstallView.tsx';
 import { Sidebar, type NavTab } from './components/Sidebar.tsx';
+import { UpdateView } from './components/UpdateView.tsx';
 import type {
   ArchiveInspection,
   BackupArchive,
   DbEngine,
   ExclusionPolicy,
+  SystemUpdateStatus,
   TelegramConfig,
   VaultStateResponse,
 } from './types.ts';
@@ -26,6 +28,7 @@ const TAB_TITLES: Record<NavTab, string> = {
   servers: 'سرورها و نصب تک‌خطی',
   policy: 'فیلتر لاگ و زمان‌بندی',
   jobs: 'صف عملیات سرور',
+  update: 'بروزرسانی پنل',
 };
 
 export default function App() {
@@ -36,6 +39,9 @@ export default function App() {
   const [refreshing, setRefreshing] = useState(false);
   const [busyActionId, setBusyActionId] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastMessage | null>(null);
+  const [updateStatus, setUpdateStatus] = useState<SystemUpdateStatus | null>(null);
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const [startingUpdate, setStartingUpdate] = useState(false);
 
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [restoreTarget, setRestoreTarget] = useState<BackupArchive | null>(null);
@@ -75,13 +81,34 @@ export default function App() {
     }
   }, [showToast]);
 
+  const fetchUpdateStatus = useCallback(async (manual = false) => {
+    if (manual) setCheckingUpdate(true);
+    try {
+      const res = await fetch('/api/system/update-status');
+      if (!res.ok) return;
+      const data = (await res.json()) as SystemUpdateStatus;
+      setUpdateStatus(data);
+    } finally {
+      if (manual) setCheckingUpdate(false);
+    }
+  }, []);
+
   useEffect(() => {
     void fetchState(false);
+    void fetchUpdateStatus(false);
     const timer = setInterval(() => {
       void fetchState(false);
     }, 5000);
     return () => clearInterval(timer);
-  }, [fetchState]);
+  }, [fetchState, fetchUpdateStatus]);
+
+  useEffect(() => {
+    if (updateStatus?.status !== 'running' && !startingUpdate) return;
+    const pollTimer = setInterval(() => {
+      void fetchUpdateStatus(false);
+    }, 2000);
+    return () => clearInterval(pollTimer);
+  }, [updateStatus?.status, startingUpdate, fetchUpdateStatus]);
 
   const handleAddServer = async (payload: {
     name: string;
@@ -230,6 +257,38 @@ export default function App() {
     showToast('تنظیمات ربات تلگرام ذخیره شد.');
   };
 
+  const handleStartUpdate = async () => {
+    setStartingUpdate(true);
+    try {
+      const res = await fetch('/api/system/update', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) {
+        showToast(data.error || 'خطا در شروع بروزرسانی', 'error');
+        return;
+      }
+      await fetchUpdateStatus(false);
+      showToast('فرایند بروزرسانی پنل آغاز شد.');
+    } finally {
+      setStartingUpdate(false);
+    }
+  };
+
+  const handleUpdateAgent = async (serverId: string) => {
+    setBusyActionId(`update-agent:${serverId}`);
+    try {
+      const res = await fetch(`/api/servers/${serverId}/update-agent`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) {
+        showToast(data.error || 'خطا در ثبت دستور بروزرسانی ایجنت', 'error');
+        return;
+      }
+      await fetchState(false);
+      showToast('دستور بروزرسانی ایجنت در صف سرور ثبت شد.');
+    } finally {
+      setBusyActionId(null);
+    }
+  };
+
   const activeJobsCount =
     state?.jobs.filter((j) => j.status === 'pending' || j.status === 'running').length ?? 0;
 
@@ -241,6 +300,7 @@ export default function App() {
         backupsCount={state?.backups.length ?? 0}
         serversCount={state?.servers.length ?? 0}
         activeJobsCount={activeJobsCount}
+        updateAvailable={Boolean(updateStatus?.updateAvailable)}
         mobileOpen={mobileMenuOpen}
         onCloseMobile={() => setMobileMenuOpen(false)}
       />
@@ -324,6 +384,7 @@ export default function App() {
                   }}
                   onTriggerBackup={handleTriggerBackup}
                   onRunSandboxBackup={handleRunSandboxBackup}
+                  onUpdateAgent={handleUpdateAgent}
                 />
               )}
 
@@ -337,6 +398,16 @@ export default function App() {
               )}
 
               {activeTab === 'jobs' && <JobsView jobs={state.jobs} />}
+
+              {activeTab === 'update' && (
+                <UpdateView
+                  updateStatus={updateStatus}
+                  checking={checkingUpdate}
+                  starting={startingUpdate}
+                  onCheckUpdate={() => void fetchUpdateStatus(true)}
+                  onStartUpdate={() => void handleStartUpdate()}
+                />
+              )}
             </>
           )}
         </main>

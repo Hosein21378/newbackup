@@ -19,6 +19,7 @@ import {
   updateTelegramConfig,
 } from './server/store.ts';
 import type { BackupArchive, BackupTrigger, DbEngine, ExclusionPolicy, PasarGuardServer } from './server/types.ts';
+import { getSystemUpdateStatus, triggerSelfUpdate } from './server/updater.ts';
 
 dotenv.config();
 
@@ -349,6 +350,40 @@ async function startServer(): Promise<void> {
     const vault = loadVault();
     const updated = updateTelegramConfig(vault, req.body);
     res.json({ telegram: updated.telegram });
+  });
+
+  // --- System Update & Remote Agent Update Endpoints ---
+  app.get('/api/system/update-status', async (_req: Request, res: Response) => {
+    const status = await getSystemUpdateStatus();
+    res.json(status);
+  });
+
+  app.post('/api/system/update', (_req: Request, res: Response) => {
+    const result = triggerSelfUpdate();
+    if (!result.started) {
+      res.status(400).json({ error: result.error });
+      return;
+    }
+    res.status(202).json({ ok: true });
+  });
+
+  app.post('/api/servers/:id/update-agent', (req: Request, res: Response) => {
+    const vault = loadVault();
+    const server = vault.servers.find((s) => s.id === req.params.id);
+    if (!server) {
+      res.status(404).json({ error: 'سرور یافت نشد.' });
+      return;
+    }
+    const job = createJobRecord({
+      serverId: server.id,
+      serverName: server.name,
+      action: 'update_agent',
+      message: 'دستور بروزرسانی ایجنت (pgbackup) در صف سرور قرار گرفت.',
+    });
+    vault.jobs.unshift(job);
+    vault.jobs = vault.jobs.slice(0, 60);
+    saveVault(vault);
+    res.status(201).json({ job });
   });
 
   // --- One-Line Installer Endpoints ---

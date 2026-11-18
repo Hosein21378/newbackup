@@ -1,4 +1,4 @@
-import { Check, Copy, FlaskConical, Play, Plus, Server, Terminal, Trash2 } from 'lucide-react';
+import { ArrowUpCircle, Check, Copy, FlaskConical, Play, Plus, Server, Terminal, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import type { DbEngine, PasarGuardServer } from '../types.ts';
 import { dbEngineLabel, formatDateTimeFa, serverStatusInfo } from '../utils/format.ts';
@@ -17,6 +17,7 @@ interface ServersInstallViewProps {
   onDeleteServer: (serverId: string) => void;
   onTriggerBackup: (serverId: string) => void;
   onRunSandboxBackup: (serverId: string) => void;
+  onUpdateAgent: (serverId: string) => void;
 }
 
 export function ServersInstallView({
@@ -27,6 +28,7 @@ export function ServersInstallView({
   onDeleteServer,
   onTriggerBackup,
   onRunSandboxBackup,
+  onUpdateAgent,
 }: ServersInstallViewProps) {
   const [name, setName] = useState('');
   const [host, setHost] = useState('');
@@ -263,6 +265,16 @@ export function ServersInstallView({
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2 shrink-0">
+                      <button
+                        type="button"
+                        disabled={busyActionId === `update-agent:${srv.id}`}
+                        onClick={() => onUpdateAgent(srv.id)}
+                        className="inline-flex items-center gap-1.5 rounded-md border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-800 disabled:opacity-50 whitespace-nowrap shrink-0"
+                        title="بروزرسانی اسکریپت ایجنت pgbackup روی این سرور"
+                      >
+                        <ArrowUpCircle className="h-3.5 w-3.5 text-sky-400" />
+                        بروزرسانی ایجنت
+                      </button>
                       <button
                         type="button"
                         disabled={busyActionId === `sandbox:${srv.id}`}

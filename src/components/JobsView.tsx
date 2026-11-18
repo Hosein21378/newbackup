@@ -37,7 +37,11 @@ export function JobsView({ jobs }: JobsViewProps) {
                     {job.status === 'running' && <Loader2 className="h-4 w-4 animate-spin text-sky-400" />}
 
                     <span className="font-semibold text-slate-100">
-                      {job.action === 'backup_now' ? 'بکاپ‌گیری بدون لاگ' : 'بازیابی آرشیو بکاپ'}
+                      {job.action === 'backup_now'
+                        ? 'بکاپ‌گیری بدون لاگ'
+                        : job.action === 'restore_archive'
+                          ? 'بازیابی آرشیو بکاپ'
+                          : 'بروزرسانی ایجنت سرور'}
                     </span>
                     <span className="text-slate-600" aria-hidden="true">·</span>
                     <span className="text-slate-300">{job.serverName}</span>
