@@ -46,7 +46,8 @@ export function BackupsView({
   const [search, setSearch] = useState('');
   const [triggerFilter, setTriggerFilter] = useState<'all' | BackupTrigger>('all');
   const [selectedServerId, setSelectedServerId] = useState<string>(servers[0]?.id || '');
-  const [installMode, setInstallMode] = useState<'connected' | 'standalone'>('connected');
+  const [installMode, setInstallMode] = useState<'connected' | 'standalone' | 'github'>('connected');
+  const [githubRepo, setGithubRepo] = useState('OWNER/pasarguard-vault');
   const [copiedCmd, setCopiedCmd] = useState(false);
 
   const activeServer = useMemo(
@@ -55,12 +56,15 @@ export function BackupsView({
   );
 
   const cleanPanelUrl = panelUrl.replace(/\/+$/, '');
+  const cleanRepo = githubRepo.trim().replace(/^https?:\/\/github\.com\//, '').replace(/\.git$/, '') || 'OWNER/REPO';
   const oneLineCommand =
     installMode === 'connected'
       ? activeServer
         ? `curl -sSL "${cleanPanelUrl}/install.sh?token=${activeServer.token}" | sudo bash`
         : `curl -sSL "${cleanPanelUrl}/install.sh?name=PasarGuard-Main" | sudo bash`
-      : `curl -sSL "${cleanPanelUrl}/standalone.sh" | sudo bash`;
+      : installMode === 'standalone'
+        ? `curl -sSL "${cleanPanelUrl}/standalone.sh" | sudo bash`
+        : `PG_VAULT_REPO="https://github.com/${cleanRepo}.git" bash -c "$(curl -sL https://raw.githubusercontent.com/${cleanRepo}/main/install.sh)"`;
 
   const handleCopyCommand = async () => {
     try {
@@ -139,7 +143,7 @@ export function BackupsView({
             </div>
           </div>
 
-          <div className="flex items-center gap-1 self-start rounded-md border border-slate-800 bg-[#0B1120] p-1 sm:self-center shrink-0">
+          <div className="flex flex-wrap items-center gap-1 self-start rounded-md border border-slate-800 bg-[#0B1120] p-1 sm:self-center shrink-0">
             <button
               type="button"
               onClick={() => setInstallMode('connected')}
@@ -162,8 +166,35 @@ export function BackupsView({
             >
               نصب مستقل (CLI)
             </button>
+            <button
+              type="button"
+              onClick={() => setInstallMode('github')}
+              className={`rounded px-3 py-1.5 text-xs font-medium transition-colors whitespace-nowrap shrink-0 ${
+                installMode === 'github'
+                  ? 'bg-sky-500/20 text-sky-300'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              نصب از گیت‌هاب
+            </button>
           </div>
         </div>
+
+        {installMode === 'github' && (
+          <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+            <label className="text-xs text-slate-400 whitespace-nowrap">
+              نام ریپازیتوری گیت‌هاب (User/Repo):
+            </label>
+            <input
+              type="text"
+              value={githubRepo}
+              onChange={(e) => setGithubRepo(e.target.value)}
+              dir="ltr"
+              placeholder="OWNER/pasarguard-vault"
+              className="w-full max-w-xs rounded-md border border-slate-800 bg-[#0B1120] px-3 py-1.5 font-mono text-xs text-slate-100 focus:border-sky-500 focus:outline-none"
+            />
+          </div>
+        )}
 
         <div className="mt-4 flex flex-col gap-3 rounded-md border border-slate-800 bg-[#0B1120] p-3 sm:flex-row sm:items-center sm:justify-between">
           <pre className="min-w-0 flex-1 overflow-x-auto font-mono text-xs leading-relaxed text-sky-300" dir="ltr">

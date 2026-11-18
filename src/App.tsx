@@ -59,7 +59,12 @@ export default function App() {
       const res = await fetch('/api/state');
       if (!res.ok) throw new Error('خطا در دریافت اطلاعات پنل');
       const data = (await res.json()) as VaultStateResponse;
-      setState(data);
+      const browserOrigin = typeof window !== 'undefined' ? window.location.origin : '';
+      const resolvedUrl =
+        data.panelUrl && !data.panelUrl.includes('localhost') && !data.panelUrl.includes('127.0.0.1')
+          ? data.panelUrl
+          : browserOrigin || data.panelUrl;
+      setState({ ...data, panelUrl: resolvedUrl });
     } catch (err) {
       if (manual) {
         showToast(err instanceof Error ? err.message : 'خطا در اتصال به سرور', 'error');
