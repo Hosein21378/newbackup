@@ -31,7 +31,7 @@ detect_db_engine() {
     return
   fi
   local db_url
-  db_url=$(grep -E '^SQLALCHEMY_DATABASE_URL=' "$env_file" | head -n1 | cut -d'=' -f2- | tr -d '"' | tr -d "'" || true)
+  db_url=$(grep -E '^(SQLALCHEMY_DATABASE_URL|DATABASE_URL)=' "$env_file" | head -n1 | cut -d'=' -f2- | tr -d '"' | tr -d "'" || true)
   if [[ "$db_url" == *"postgresql"* || "$db_url" == *"timescale"* ]]; then
     echo "postgres"
   elif [[ "$db_url" == *"mysql"* || "$db_url" == *"mariadb"* ]]; then
@@ -65,7 +65,7 @@ send_telegram_backup() {
   local archive_path="$1"
   local caption="$2"
   if [[ "\${TELEGRAM_ENABLED:-false}" == "true" && -n "\${TELEGRAM_BOT_TOKEN:-}" && -n "\${TELEGRAM_CHAT_ID:-}" ]]; then
-    curl -sS -F "chat_id=\${TELEGRAM_CHAT_ID}" \\
+    curl -fsS --connect-timeout 10 --max-time 120 -F "chat_id=\${TELEGRAM_CHAT_ID}" \\
       -F "document=@\${archive_path}" \\
       -F "caption=\${caption}" \\
       "https://api.telegram.org/bot\${TELEGRAM_BOT_TOKEN}/sendDocument" >/dev/null || true
@@ -107,7 +107,7 @@ create_backup() {
     fi
   elif [[ "$db_engine" == "mysql" ]]; then
     local db_url
-    db_url=$(grep -E '^SQLALCHEMY_DATABASE_URL=' "$PG_OPT_DIR/.env" | head -n1 | cut -d'=' -f2- | tr -d '"' | tr -d "'" || true)
+    db_url=$(grep -E '^(SQLALCHEMY_DATABASE_URL|DATABASE_URL)=' "$PG_OPT_DIR/.env" | head -n1 | cut -d'=' -f2- | tr -d '"' | tr -d "'" || true)
     local db_name
     db_name=$(basename "\${db_url%%\\?*}")
     local ignore_flags=""
@@ -122,7 +122,7 @@ create_backup() {
     fi
   elif [[ "$db_engine" == "postgres" ]]; then
     local db_url
-    db_url=$(grep -E '^SQLALCHEMY_DATABASE_URL=' "$PG_OPT_DIR/.env" | head -n1 | cut -d'=' -f2- | tr -d '"' | tr -d "'" || true)
+    db_url=$(grep -E '^(SQLALCHEMY_DATABASE_URL|DATABASE_URL)=' "$PG_OPT_DIR/.env" | head -n1 | cut -d'=' -f2- | tr -d '"' | tr -d "'" || true)
     local db_name
     db_name=$(basename "\${db_url%%\\?*}")
     local exclude_flags=""
@@ -170,7 +170,7 @@ MANIFEST_EOF
   ls -1t "$BACKUP_LOCAL_DIR"/pg-*.tar.gz 2>/dev/null | tail -n +"$((RETENTION_COUNT + 1))" | xargs -r rm -f || true
 
   if [[ -n "\${PANEL_URL:-}" && -n "\${AGENT_TOKEN:-}" ]]; then
-    curl -sS -X POST "$PANEL_URL/api/agent/upload" \\
+    curl -fsS --connect-timeout 10 --max-time 300 -X POST "$PANEL_URL/api/agent/upload" \\
       -H "Authorization: Bearer $AGENT_TOKEN" \\
       -F "archive=@$out_file" \\
       -F "trigger=$trigger" \\
@@ -186,11 +186,11 @@ MANIFEST_EOF
 restore_backup() {
   local archive_file="$1"
   if [[ ! -f "$archive_file" ]]; then
-    echo "[ERROR] فایل بکاپ یافت نشد: $archive_file" >&2
+    echo "[ERROR] Backup archive not found: $archive_file" >&2
     exit 1
   fi
 
-  echo "[Restore] ایجاد بکاپ ایمن پیش از بازیابی (Pre-Restore Safety Snapshot)..."
+  echo "[Restore] Creating pre-restore safety snapshot..."
   create_backup "pre_restore" >/dev/null || true
 
   local tmp_restore
@@ -198,7 +198,7 @@ restore_backup() {
   trap 'rm -rf "$tmp_restore"' RETURN
   tar -C "$tmp_restore" -xzf "$archive_file"
 
-  echo "[Restore] توقف موقت کانتینرهای PasarGuard..."
+  echo "[Restore] Stopping PasarGuard containers..."
   if [[ -f "$PG_OPT_DIR/docker-compose.yml" ]]; then
     docker compose -f "$PG_OPT_DIR/docker-compose.yml" down || true
   fi
@@ -226,7 +226,7 @@ restore_backup() {
     svc=$(docker compose -f "$PG_OPT_DIR/docker-compose.yml" ps --services | grep -iE 'mysql|mariadb' | head -n1 || true)
     if [[ -n "$svc" ]]; then
       local db_url db_name
-      db_url=$(grep -E '^SQLALCHEMY_DATABASE_URL=' "$PG_OPT_DIR/.env" | head -n1 | cut -d'=' -f2- | tr -d '"' | tr -d "'" || true)
+      db_url=$(grep -E '^(SQLALCHEMY_DATABASE_URL|DATABASE_URL)=' "$PG_OPT_DIR/.env" | head -n1 | cut -d'=' -f2- | tr -d '"' | tr -d "'" || true)
       db_name=$(basename "\${db_url%%\\?*}")
       docker compose -f "$PG_OPT_DIR/docker-compose.yml" exec -T "$svc" sh -c "mysql -u root -p\\"\\\$MYSQL_ROOT_PASSWORD\\" \\"$db_name\\"" < "$tmp_restore/db/mysql_dump.sql"
     fi
@@ -236,13 +236,13 @@ restore_backup() {
     svc=$(docker compose -f "$PG_OPT_DIR/docker-compose.yml" ps --services | grep -iE 'postgres|timescale' | head -n1 || true)
     if [[ -n "$svc" ]]; then
       local db_url db_name
-      db_url=$(grep -E '^SQLALCHEMY_DATABASE_URL=' "$PG_OPT_DIR/.env" | head -n1 | cut -d'=' -f2- | tr -d '"' | tr -d "'" || true)
+      db_url=$(grep -E '^(SQLALCHEMY_DATABASE_URL|DATABASE_URL)=' "$PG_OPT_DIR/.env" | head -n1 | cut -d'=' -f2- | tr -d '"' | tr -d "'" || true)
       db_name=$(basename "\${db_url%%\\?*}")
       docker compose -f "$PG_OPT_DIR/docker-compose.yml" exec -T "$svc" psql -U postgres -d "$db_name" < "$tmp_restore/db/postgres_dump.sql"
     fi
   fi
 
-  echo "[Restore] بازیابی با موفقیت انجام شد و پنل PasarGuard راه‌اندازی مجدد شد."
+  echo "[Restore] Completed successfully. PasarGuard services restarted."
 }
 
 case "\${1:-}" in
@@ -251,13 +251,13 @@ case "\${1:-}" in
     ;;
   restore)
     if [[ -z "\${2:-}" ]]; then
-      echo "استفاده: pgbackup restore /path/to/archive.tar.gz"
+      echo "Usage: pgbackup restore /path/to/archive.tar.gz"
       exit 1
     fi
     restore_backup "$2"
     ;;
   list)
-    ls -lh "$BACKUP_LOCAL_DIR"/pg-*.tar.gz 2>/dev/null || echo "هیچ بکاپ محلی وجود ندارد."
+    ls -lh "$BACKUP_LOCAL_DIR"/pg-*.tar.gz 2>/dev/null || echo "No local backups found in $BACKUP_LOCAL_DIR."
     ;;
   poll)
     if [[ -z "\${PANEL_URL:-}" || -z "\${AGENT_TOKEN:-}" ]]; then
@@ -267,22 +267,22 @@ case "\${1:-}" in
     host_ip=$(hostname -I 2>/dev/null | awk '{print $1}' || hostname)
     os_name=$(grep PRETTY_NAME /etc/os-release 2>/dev/null | cut -d= -f2 | tr -d '"' || uname -s)
     payload=$(jq -n --arg host "$host_ip" --arg db "$local_db" --arg os "$os_name" '{host:$host,dbEngine:$db,osInfo:$os}')
-    jobs_json=$(curl -sS -X POST "$PANEL_URL/api/agent/heartbeat" \\
+    jobs_json=$(curl -fsS --connect-timeout 8 --max-time 20 -X POST "$PANEL_URL/api/agent/heartbeat" \\
       -H "Authorization: Bearer $AGENT_TOKEN" \\
       -H "Content-Type: application/json" \\
-      -d "$payload" || echo '{"jobs":[]}')
+      -d "$payload" 2>/dev/null || echo '{"jobs":[]}')
 
     echo "$jobs_json" | jq -c '.jobs[]?' | while IFS= read -r job; do
       job_id=$(echo "$job" | jq -r '.id')
       action=$(echo "$job" | jq -r '.action')
       if [[ "$action" == "backup_now" ]]; then
         if out=$(create_backup "manual" 2>&1); then
-          curl -sS -X POST "$PANEL_URL/api/agent/jobs/$job_id/complete" \\
+          curl -fsS --connect-timeout 8 --max-time 30 -X POST "$PANEL_URL/api/agent/jobs/$job_id/complete" \\
             -H "Authorization: Bearer $AGENT_TOKEN" \\
             -H "Content-Type: application/json" \\
             -d "{\\"status\\":\\"completed\\",\\"outputLog\\":$(echo "$out" | jq -Rs .)}" >/dev/null || true
         else
-          curl -sS -X POST "$PANEL_URL/api/agent/jobs/$job_id/complete" \\
+          curl -fsS --connect-timeout 8 --max-time 30 -X POST "$PANEL_URL/api/agent/jobs/$job_id/complete" \\
             -H "Authorization: Bearer $AGENT_TOKEN" \\
             -H "Content-Type: application/json" \\
             -d "{\\"status\\":\\"failed\\",\\"outputLog\\":$(echo "$out" | jq -Rs .)}" >/dev/null || true
@@ -290,16 +290,16 @@ case "\${1:-}" in
       elif [[ "$action" == "restore_archive" ]]; then
         bkp_id=$(echo "$job" | jq -r '.backupId')
         dl_file="/tmp/restore-$bkp_id.tar.gz"
-        curl -sS -L -H "Authorization: Bearer $AGENT_TOKEN" "$PANEL_URL/api/agent/download/$bkp_id" -o "$dl_file"
+        curl -fsS --connect-timeout 10 --max-time 300 -L -H "Authorization: Bearer $AGENT_TOKEN" "$PANEL_URL/api/agent/download/$bkp_id" -o "$dl_file"
         if out=$(restore_backup "$dl_file" 2>&1); then
           rm -f "$dl_file"
-          curl -sS -X POST "$PANEL_URL/api/agent/jobs/$job_id/complete" \\
+          curl -fsS --connect-timeout 8 --max-time 30 -X POST "$PANEL_URL/api/agent/jobs/$job_id/complete" \\
             -H "Authorization: Bearer $AGENT_TOKEN" \\
             -H "Content-Type: application/json" \\
             -d "{\\"status\\":\\"completed\\",\\"outputLog\\":$(echo "$out" | jq -Rs .)}" >/dev/null || true
         else
           rm -f "$dl_file"
-          curl -sS -X POST "$PANEL_URL/api/agent/jobs/$job_id/complete" \\
+          curl -fsS --connect-timeout 8 --max-time 30 -X POST "$PANEL_URL/api/agent/jobs/$job_id/complete" \\
             -H "Authorization: Bearer $AGENT_TOKEN" \\
             -H "Content-Type: application/json" \\
             -d "{\\"status\\":\\"failed\\",\\"outputLog\\":$(echo "$out" | jq -Rs .)}" >/dev/null || true
@@ -309,9 +309,9 @@ case "\${1:-}" in
     ;;
   *)
     echo "PasarGuard Vault CLI (pgbackup)"
-    echo "  pgbackup backup              گرفتن بکاپ فوری بدون لاگ"
-    echo "  pgbackup restore <file>      بازیابی بکاپ همراه با پیش‌نسخه ایمن"
-    echo "  pgbackup list                نمایش بکاپ‌های محلی"
+    echo "  pgbackup backup              Create log-free backup immediately"
+    echo "  pgbackup restore <file>      Restore archive with pre-restore safety snapshot"
+    echo "  pgbackup list                List local backups"
     ;;
 esac
 `;
@@ -335,9 +335,12 @@ set -euo pipefail
 # ==============================================================================
 
 if [[ \${EUID:-0} -ne 0 ]]; then
-  echo "[ERROR] لطفاً اسکریپت را با دسترسی root یا sudo اجرا کنید."
+  echo "[ERROR] Please run this script as root (use sudo)."
   exit 1
 fi
+
+export DEBIAN_FRONTEND=noninteractive
+export NEEDRESTART_MODE=a
 
 PANEL_URL='${escapeBashSingle(cleanPanelUrl)}'
 AGENT_TOKEN='${escapeBashSingle(server.token)}'
@@ -349,19 +352,19 @@ BACKUP_LOCAL_DIR="/var/backups/pasarguard"
 CONFIG_DIR="/etc/pasarguard-vault"
 CONFIG_FILE="$CONFIG_DIR/agent.env"
 
-echo "[1/5] بررسی و نصب پیش‌نیازها (curl, jq, tar, sqlite3)..."
+echo "[1/5] Checking dependencies (curl, jq, tar, sqlite3)..."
 if command -v apt-get >/dev/null 2>&1; then
-  DEBIAN_FRONTEND=noninteractive apt-get update -qq
-  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq curl jq tar gzip sqlite3 >/dev/null
+  apt-get update -qq
+  apt-get install -y -qq -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" curl jq tar gzip sqlite3
 elif command -v dnf >/dev/null 2>&1; then
-  dnf install -y -q curl jq tar gzip sqlite >/dev/null
+  dnf install -y -q curl jq tar gzip sqlite
 elif command -v yum >/dev/null 2>&1; then
-  yum install -y -q curl jq tar gzip sqlite >/dev/null
+  yum install -y -q curl jq tar gzip sqlite
 fi
 
 mkdir -p "$CONFIG_DIR" "$BACKUP_LOCAL_DIR"
 
-echo "[2/5] ذخیره پیکربندی ایجنت در $CONFIG_FILE..."
+echo "[2/5] Saving agent configuration to $CONFIG_FILE..."
 cat > "$CONFIG_FILE" <<EOF
 PANEL_URL="$PANEL_URL"
 AGENT_TOKEN="$AGENT_TOKEN"
@@ -381,13 +384,13 @@ TELEGRAM_CHAT_ID="${escapeBashSingle(telegram.chatId)}"
 EOF
 chmod 600 "$CONFIG_FILE"
 
-echo "[3/5] نصب ابزار بکاپ و بازیابی اختصاصی PasarGuard (/usr/local/bin/pgbackup)..."
+echo "[3/5] Installing PasarGuard backup CLI (/usr/local/bin/pgbackup)..."
 cat > /usr/local/bin/pgbackup <<'PGBACKUP_EOF'
 ${PGBACKUP_CLI_BODY}
 PGBACKUP_EOF
 chmod +x /usr/local/bin/pgbackup
 
-echo "[4/5] راه‌اندازی سرویس systemd برای ارتباط لحظه‌ای و بکاپ زمان‌بندی‌شده..."
+echo "[4/5] Configuring systemd timers for polling and scheduled backups..."
 cat > /etc/systemd/system/pasarguard-vault-poll.service <<'EOF'
 [Unit]
 Description=PasarGuard Vault Agent Poll Service
@@ -437,15 +440,16 @@ systemctl daemon-reload
 systemctl enable --now pasarguard-vault-poll.timer
 ${policy.scheduleEnabled ? 'systemctl enable --now pasarguard-vault-backup.timer' : '# Scheduled timer disabled in panel policy'}
 
-echo "[5/5] ثبت سرور در پنل مرکزی و دریافت تاییدیه..."
+echo "[5/5] Registering server with panel..."
 /usr/local/bin/pgbackup poll || true
 
 echo ""
 echo "=================================================================="
-echo " نصب ایجنت بکاپر PasarGuard Vault با موفقیت انجام شد!"
-echo " • دستور دستی گرفتن بکاپ:   pgbackup backup"
-echo " • دستور دستی بازیابی:       pgbackup restore /path/to/file.tar.gz"
-echo " • پوشه لاگ‌ها و *.log به‌طور خودکار از تمامی بکاپ‌ها حذف می‌شوند."
+echo " PasarGuard Vault Agent installed successfully!"
+echo " • Manual backup:   pgbackup backup"
+echo " • Manual restore:  pgbackup restore /path/to/archive.tar.gz"
+echo " • List local:      pgbackup list"
+echo " • Logs directory and *.log files are excluded automatically."
 echo "=================================================================="
 `;
 }
@@ -463,23 +467,27 @@ set -euo pipefail
 # ==============================================================================
 # PasarGuard Standalone Log-Free Backuper Installer
 # Target: https://github.com/PasarGuard/panel
-# Installs pgbackup CLI + automated systemd timer directly on your VPS
 # ==============================================================================
 
 if [[ \${EUID:-0} -ne 0 ]]; then
-  echo "[ERROR] لطفاً اسکریپت را با دسترسی root یا sudo اجرا کنید."
+  echo "[ERROR] Please run this script as root (use sudo)."
   exit 1
 fi
 
+export DEBIAN_FRONTEND=noninteractive
+export NEEDRESTART_MODE=a
+
+echo "[1/3] Installing required packages (curl, tar, gzip, sqlite3, jq)..."
 if command -v apt-get >/dev/null 2>&1; then
-  DEBIAN_FRONTEND=noninteractive apt-get update -qq
-  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq curl tar gzip sqlite3 >/dev/null
+  apt-get update -qq
+  apt-get install -y -qq -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" curl tar gzip sqlite3 jq
 elif command -v dnf >/dev/null 2>&1; then
-  dnf install -y -q curl tar gzip sqlite >/dev/null
+  dnf install -y -q curl tar gzip sqlite jq
 fi
 
 mkdir -p /etc/pasarguard-vault /var/backups/pasarguard
 
+echo "[2/3] Writing configuration to /etc/pasarguard-vault/agent.env..."
 cat > /etc/pasarguard-vault/agent.env <<EOF
 PG_OPT_DIR="${escapeBashSingle(optPath || '/opt/pasarguard')}"
 PG_DATA_DIR="${escapeBashSingle(dataPath || '/var/lib/pasarguard')}"
@@ -495,6 +503,7 @@ TELEGRAM_CHAT_ID="${escapeBashSingle(telegram.chatId)}"
 EOF
 chmod 600 /etc/pasarguard-vault/agent.env
 
+echo "[3/3] Installing pgbackup CLI and daily systemd timer..."
 cat > /usr/local/bin/pgbackup <<'PGBACKUP_EOF'
 ${PGBACKUP_CLI_BODY}
 PGBACKUP_EOF
@@ -527,10 +536,10 @@ ${policy.scheduleEnabled ? 'systemctl enable --now pasarguard-vault-backup.timer
 
 echo ""
 echo "=================================================================="
-echo " بکاپر مستقل PasarGuard با موفقیت نصب شد!"
-echo " • گرفتن بکاپ بدون لاگ:     pgbackup backup"
-echo " • لیست بکاپ‌ها:            pgbackup list"
-echo " • بازیابی مستقیم بکاپ:     pgbackup restore /var/backups/pasarguard/<file>.tar.gz"
+echo " PasarGuard Standalone Backuper installed successfully!"
+echo " • Manual backup:   pgbackup backup"
+echo " • List backups:    pgbackup list"
+echo " • Restore backup:  pgbackup restore /var/backups/pasarguard/<file>.tar.gz"
 echo "=================================================================="
 `;
 }
