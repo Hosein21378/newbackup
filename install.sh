@@ -3,9 +3,9 @@ set -euo pipefail
 
 # ==============================================================================
 # PasarGuard Vault - GitHub One-Line Panel & Log-Free Backuper Installer
-# Target Panel: https://github.com/PasarGuard/panel
+# Repository: https://github.com/Hosein21378/newbackup
 # Usage:
-#   bash -c "$(curl -sL https://raw.githubusercontent.com/OWNER/REPO/main/install.sh)"
+#   bash -c "$(curl -sL https://raw.githubusercontent.com/Hosein21378/newbackup/main/install.sh)"
 # ==============================================================================
 
 if [[ "${EUID:-0}" -ne 0 ]]; then
@@ -13,7 +13,8 @@ if [[ "${EUID:-0}" -ne 0 ]]; then
   exit 1
 fi
 
-REPO_URL="${PG_VAULT_REPO:-}"
+DEFAULT_REPO="https://github.com/Hosein21378/newbackup.git"
+REPO_URL="${PG_VAULT_REPO:-$DEFAULT_REPO}"
 INSTALL_DIR="/opt/pasarguard-vault"
 PORT="${PG_VAULT_PORT:-3000}"
 
@@ -41,34 +42,31 @@ if ! command -v node >/dev/null 2>&1 || [[ "$(node -v | sed 's/v//' | cut -d. -f
   fi
 fi
 
-# 3. Clone or update repository if REPO_URL provided, or use current directory
-if [[ -n "$REPO_URL" ]]; then
-  echo "[2/5] دریافت سورس پنل از گیت‌هاب..."
+# 3. Clone or update repository
+if [[ -f "./package.json" && -f "./server.ts" && -z "${PG_VAULT_REPO:-}" ]]; then
+  echo "[2/5] استفاده از فایل‌های محلی پروژه در $INSTALL_DIR..."
+  if [[ "$(pwd)" != "$INSTALL_DIR" ]]; then
+    mkdir -p "$INSTALL_DIR"
+    cp -a . "$INSTALL_DIR/"
+  fi
+else
+  echo "[2/5] دریافت سورس پنل از گیت‌هاب ($REPO_URL)..."
   if [[ -d "$INSTALL_DIR/.git" ]]; then
     git -C "$INSTALL_DIR" pull --ff-only
   else
     rm -rf "$INSTALL_DIR"
     git clone "$REPO_URL" "$INSTALL_DIR"
   fi
-elif [[ -f "./package.json" && -f "./server.ts" ]]; then
-  echo "[2/5] کپی فایل‌های پروژه به $INSTALL_DIR..."
-  mkdir -p "$INSTALL_DIR"
-  cp -a . "$INSTALL_DIR/"
-else
-  read -r -p "آدرس ریپازیتوری گیت‌هاب (مثال https://github.com/USER/REPO.git): " INPUT_REPO
-  if [[ -z "$INPUT_REPO" ]]; then
-    echo "[ERROR] آدرس ریپازیتوری وارد نشد."
-    exit 1
-  fi
-  rm -rf "$INSTALL_DIR"
-  git clone "$INPUT_REPO" "$INSTALL_DIR"
 fi
 
-# 4. Build panel
+# 4. Install dependencies & build frontend
 echo "[3/5] نصب وابستگی‌ها و بیلد پنل مدیریت..."
 cd "$INSTALL_DIR"
-npm install --silent
+npm install --no-audit --no-fund --silent
 npm run build --silent
+
+NODE_BIN="$(command -v node)"
+TSX_BIN="$INSTALL_DIR/node_modules/.bin/tsx"
 
 # 5. Configure systemd service for the Web Panel
 echo "[4/5] راه‌اندازی سرویس systemd برای پنل وب (پورت $PORT)..."
@@ -81,7 +79,8 @@ After=network-online.target docker.service
 Type=simple
 WorkingDirectory=$INSTALL_DIR
 Environment=NODE_ENV=production
-ExecStart=/usr/bin/npx tsx server.ts
+Environment=PORT=$PORT
+ExecStart=$NODE_BIN $TSX_BIN $INSTALL_DIR/server.ts
 Restart=always
 RestartSec=5
 
@@ -92,14 +91,16 @@ EOF
 systemctl daemon-reload
 systemctl enable --now pasarguard-vault-panel.service
 
-# 6. Auto-connect local PasarGuard server if /opt/pasarguard exists
-echo "[5/5] بررسی نصب PasarGuard روی این سرور..."
-sleep 2
-if [[ -d "/opt/pasarguard" || -d "/var/lib/pasarguard" ]]; then
-  curl -sSL "http://127.0.0.1:${PORT}/install.sh?name=$(hostname)" | bash || true
-else
-  curl -sSL "http://127.0.0.1:${PORT}/standalone.sh" | bash || true
-fi
+# 6. Wait for panel port to come online and auto-register this server
+echo "[5/5] اتصال خودکار این سرور به پنل مدیریت..."
+for _ in $(seq 1 20); do
+  if curl -sf "http://127.0.0.1:${PORT}/api/state" >/dev/null 2>&1; then
+    break
+  fi
+  sleep 1
+done
+
+curl -sSL "http://127.0.0.1:${PORT}/install.sh?name=$(hostname)" | bash || true
 
 SERVER_IP=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "YOUR_SERVER_IP")
 echo ""

@@ -266,10 +266,11 @@ case "\${1:-}" in
     local_db=$(detect_db_engine)
     host_ip=$(hostname -I 2>/dev/null | awk '{print $1}' || hostname)
     os_name=$(grep PRETTY_NAME /etc/os-release 2>/dev/null | cut -d= -f2 | tr -d '"' || uname -s)
+    payload=$(jq -n --arg host "$host_ip" --arg db "$local_db" --arg os "$os_name" '{host:$host,dbEngine:$db,osInfo:$os}')
     jobs_json=$(curl -sS -X POST "$PANEL_URL/api/agent/heartbeat" \\
       -H "Authorization: Bearer $AGENT_TOKEN" \\
       -H "Content-Type: application/json" \\
-      -d "{\\"host\\":\\"$host_ip\\",\\"dbEngine\\":\\"$local_db\\",\\"osInfo\\":\\"$os_name\\"}" || echo '{"jobs":[]}')
+      -d "$payload" || echo '{"jobs":[]}')
 
     echo "$jobs_json" | jq -c '.jobs[]?' | while IFS= read -r job; do
       job_id=$(echo "$job" | jq -r '.id')

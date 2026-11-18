@@ -5,7 +5,6 @@ import path from 'node:path';
 import dotenv from 'dotenv';
 import express, { type Request, type Response } from 'express';
 import multer from 'multer';
-import { createServer as createViteServer } from 'vite';
 import { generateConnectedInstallScript, generateStandaloneScript } from './server/scripts.ts';
 import {
   computeSha256,
@@ -23,7 +22,7 @@ import type { BackupArchive, BackupTrigger, DbEngine, ExclusionPolicy, PasarGuar
 
 dotenv.config();
 
-const PORT = 3000;
+const PORT = Number(process.env.PORT || 3000);
 const upload = multer({
   dest: path.join(os.tmpdir(), 'pgvault-uploads'),
   limits: { fileSize: 1024 * 1024 * 512 },
@@ -528,6 +527,7 @@ async function startServer(): Promise<void> {
 
   // --- Vite Middleware / Production Static Serving ---
   if (process.env.NODE_ENV !== 'production') {
+    const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',

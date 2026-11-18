@@ -6,13 +6,19 @@
 
 ## نصب تک‌خطی روی سرور (One-Line Install)
 
-دستور زیر را با دسترسی `root` روی سرور لینوکس (Ubuntu / Debian) اجرا کنید *(نام کاربری و ریپازیتوری خود را جایگزین `OWNER/REPO` نمایید)*:
+دستور زیر را با دسترسی `root` روی سرور لینوکس (Ubuntu / Debian) اجرا کنید:
 
 ```bash
-PG_VAULT_REPO="https://github.com/OWNER/REPO.git" bash -c "$(curl -sL https://raw.githubusercontent.com/OWNER/REPO/main/install.sh)"
+bash -c "$(curl -sL https://raw.githubusercontent.com/Hosein21378/newbackup/main/install.sh)"
 ```
 
-پس از اجرا، پنل مدیریت روی پورت `3000` فعال می‌شود و ابزار `pgbackup` به‌صورت خودکار روی سرور نصب می‌گردد.
+برای تغییر پورت پیش‌فرض (مثلاً پورت `8080` به جای `3000`):
+
+```bash
+PG_VAULT_PORT=8080 bash -c "$(curl -sL https://raw.githubusercontent.com/Hosein21378/newbackup/main/install.sh)"
+```
+
+پس از اجرا، پنل مدیریت روی پورت `3000` (یا پورت انتخابی شما) فعال می‌شود و ابزار `pgbackup` به‌صورت خودکار روی سرور نصب و به پنل متصل می‌گردد.
 
 ---
 

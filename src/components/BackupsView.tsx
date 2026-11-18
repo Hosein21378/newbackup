@@ -47,7 +47,7 @@ export function BackupsView({
   const [triggerFilter, setTriggerFilter] = useState<'all' | BackupTrigger>('all');
   const [selectedServerId, setSelectedServerId] = useState<string>(servers[0]?.id || '');
   const [installMode, setInstallMode] = useState<'connected' | 'standalone' | 'github'>('connected');
-  const [githubRepo, setGithubRepo] = useState('OWNER/pasarguard-vault');
+  const [githubRepo, setGithubRepo] = useState('Hosein21378/newbackup');
   const [copiedCmd, setCopiedCmd] = useState(false);
 
   const activeServer = useMemo(
@@ -56,7 +56,7 @@ export function BackupsView({
   );
 
   const cleanPanelUrl = panelUrl.replace(/\/+$/, '');
-  const cleanRepo = githubRepo.trim().replace(/^https?:\/\/github\.com\//, '').replace(/\.git$/, '') || 'OWNER/REPO';
+  const cleanRepo = githubRepo.trim().replace(/^https?:\/\/github\.com\//, '').replace(/\.git$/, '') || 'Hosein21378/newbackup';
   const oneLineCommand =
     installMode === 'connected'
       ? activeServer
@@ -64,7 +64,7 @@ export function BackupsView({
         : `curl -sSL "${cleanPanelUrl}/install.sh?name=PasarGuard-Main" | sudo bash`
       : installMode === 'standalone'
         ? `curl -sSL "${cleanPanelUrl}/standalone.sh" | sudo bash`
-        : `PG_VAULT_REPO="https://github.com/${cleanRepo}.git" bash -c "$(curl -sL https://raw.githubusercontent.com/${cleanRepo}/main/install.sh)"`;
+        : `bash -c "$(curl -sL https://raw.githubusercontent.com/${cleanRepo}/main/install.sh)"`;
 
   const handleCopyCommand = async () => {
     try {
