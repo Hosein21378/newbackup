@@ -1,11 +1,14 @@
 import {
+  Check,
   CheckCircle2,
+  Copy,
   Download,
   Eye,
   FlaskConical,
   Plus,
   RotateCcw,
   Search,
+  Terminal,
   Trash2,
   Upload,
 } from 'lucide-react';
@@ -16,6 +19,7 @@ import { dbEngineLabel, formatBytes, formatDateTimeFa, triggerLabel } from '../u
 interface BackupsViewProps {
   backups: BackupArchive[];
   servers: PasarGuardServer[];
+  panelUrl: string;
   busyActionId: string | null;
   onTriggerBackup: (serverId: string) => void;
   onRunSandboxBackup: (serverId: string) => void;
@@ -29,6 +33,7 @@ interface BackupsViewProps {
 export function BackupsView({
   backups,
   servers,
+  panelUrl,
   busyActionId,
   onTriggerBackup,
   onRunSandboxBackup,
@@ -41,11 +46,31 @@ export function BackupsView({
   const [search, setSearch] = useState('');
   const [triggerFilter, setTriggerFilter] = useState<'all' | BackupTrigger>('all');
   const [selectedServerId, setSelectedServerId] = useState<string>(servers[0]?.id || '');
+  const [installMode, setInstallMode] = useState<'connected' | 'standalone'>('connected');
+  const [copiedCmd, setCopiedCmd] = useState(false);
 
   const activeServer = useMemo(
     () => servers.find((s) => s.id === selectedServerId) || servers[0],
     [servers, selectedServerId]
   );
+
+  const cleanPanelUrl = panelUrl.replace(/\/+$/, '');
+  const oneLineCommand =
+    installMode === 'connected'
+      ? activeServer
+        ? `curl -sSL "${cleanPanelUrl}/install.sh?token=${activeServer.token}" | sudo bash`
+        : `curl -sSL "${cleanPanelUrl}/install.sh?name=PasarGuard-Main" | sudo bash`
+      : `curl -sSL "${cleanPanelUrl}/standalone.sh" | sudo bash`;
+
+  const handleCopyCommand = async () => {
+    try {
+      await navigator.clipboard.writeText(oneLineCommand);
+      setCopiedCmd(true);
+      setTimeout(() => setCopiedCmd(false), 2000);
+    } catch {
+      // Ignore clipboard failures in restricted frames
+    }
+  };
 
   const filteredBackups = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -95,6 +120,72 @@ export function BackupsView({
             {onlineServersCount} / {servers.length}
           </div>
           <div className="mt-1 text-xs text-slate-500">سرور فعال و متصل به پنل</div>
+        </div>
+      </section>
+
+      {/* One-Line Server Installer Strip (Directly visible on first page) */}
+      <section className="rounded-lg border border-slate-800 bg-[#0F172A] p-5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-2.5">
+            <Terminal className="h-4.5 w-4.5 text-sky-400 shrink-0" />
+            <div>
+              <h2 className="text-sm font-semibold text-slate-100">
+                دستور نصب تک‌خطی بکاپر روی سرور PasarGuard
+              </h2>
+              <p className="mt-0.5 text-xs text-slate-400">
+                این دستور را در ترمینال سرور لینوکس اجرا کنید تا بکاپر بدون لاگ ({' '}
+                <span className="font-mono text-slate-300">pgbackup</span>) نصب و آماده بکاپ‌گیری و بازیابی شود.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1 self-start rounded-md border border-slate-800 bg-[#0B1120] p-1 sm:self-center shrink-0">
+            <button
+              type="button"
+              onClick={() => setInstallMode('connected')}
+              className={`rounded px-3 py-1.5 text-xs font-medium transition-colors whitespace-nowrap shrink-0 ${
+                installMode === 'connected'
+                  ? 'bg-sky-500/20 text-sky-300'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              متصل به همین پنل
+            </button>
+            <button
+              type="button"
+              onClick={() => setInstallMode('standalone')}
+              className={`rounded px-3 py-1.5 text-xs font-medium transition-colors whitespace-nowrap shrink-0 ${
+                installMode === 'standalone'
+                  ? 'bg-sky-500/20 text-sky-300'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              نصب مستقل (CLI)
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-4 flex flex-col gap-3 rounded-md border border-slate-800 bg-[#0B1120] p-3 sm:flex-row sm:items-center sm:justify-between">
+          <pre className="min-w-0 flex-1 overflow-x-auto font-mono text-xs leading-relaxed text-sky-300" dir="ltr">
+            {oneLineCommand}
+          </pre>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={handleCopyCommand}
+              className="inline-flex items-center gap-1.5 rounded-md bg-sky-500 px-3.5 py-2 text-xs font-medium text-slate-950 transition-colors hover:bg-sky-400 whitespace-nowrap shrink-0"
+            >
+              {copiedCmd ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+              {copiedCmd ? 'کپی شد' : 'کپی دستور نصب'}
+            </button>
+            <button
+              type="button"
+              onClick={onNavigateServers}
+              className="inline-flex items-center gap-1.5 rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-xs font-medium text-slate-200 hover:bg-slate-800 whitespace-nowrap shrink-0"
+            >
+              تنظیمات سرورها
+            </button>
+          </div>
         </div>
       </section>
 

@@ -293,6 +293,7 @@ export default function App() {
                 <BackupsView
                   backups={state.backups}
                   servers={state.servers}
+                  panelUrl={state.panelUrl}
                   busyActionId={busyActionId}
                   onTriggerBackup={handleTriggerBackup}
                   onRunSandboxBackup={handleRunSandboxBackup}
