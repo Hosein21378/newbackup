@@ -1,0 +1,6 @@
+{
+  "name": "PasarGuard Vault",
+  "description": "پنل مدیریت بکاپ و بازیابی اختصاصی PasarGuard با حذف خودکار لاگ‌ها و نصب تک‌خطی روی سرور",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
