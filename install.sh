@@ -73,7 +73,7 @@ fi
 # 4. Install dependencies & build frontend
 echo "[4/6] Installing Node dependencies and building web panel (this may take 1-2 minutes)..."
 cd "$INSTALL_DIR"
-npm install --no-audit --no-fund --loglevel=error
+npm install --legacy-peer-deps --no-audit --no-fund --loglevel=error
 npm run build
 
 if [[ ! -f "$INSTALL_DIR/dist/index.html" ]]; then
